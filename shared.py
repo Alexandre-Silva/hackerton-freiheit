@@ -141,3 +141,22 @@ def simulate_fight(src_planet, target_planet, ships):
     src_result = battle_round(defender, attacker)
 
     return src_result, target_result
+
+def battle_round(attacker,defender):
+    # only an asymetric round. this needs to be called twice
+    numships = len(attacker)
+    defender = defender[::]
+    for def_type in range(0,numships):
+        for att_type in range(0,numships):
+            if def_type == att_type:
+                multiplier = 0.1
+                absolute = 1
+            if (def_type-att_type)%numships == 1:
+                multiplier = 0.25
+                absolute = 2
+            if (def_type-att_type)%numships == numships-1:
+                multiplier = 0.01
+                absolute = 1
+            defender[def_type] -= max((attacker[att_type]*multiplier), (attacker[att_type] > 0) * absolute)
+        defender[def_type] = max(0,defender[def_type])
+    return defender

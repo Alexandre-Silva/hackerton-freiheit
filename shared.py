@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import ceil, sqrt
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Iterable
+import pprint
 
 
 @dataclass
@@ -15,8 +16,8 @@ class Planet():
     prodution: Tuple[int, int, int]
 
     def distance(self, other: 'Planet'):
-        xdiff = self.posx - other.posx
-        ydiff = self.posy - other.posy
+        xdiff = self.x - other.x
+        ydiff = self.y - other.y
         return int(ceil(sqrt(xdiff * xdiff + ydiff * ydiff)))
 
     def comp(self, other: 'Planet'):
@@ -33,6 +34,9 @@ class Planet():
             raw['ships'],
             raw['production'],
         )
+
+    def __hash__(self):
+        return hash(self.id)
 
 
 @dataclass
@@ -93,3 +97,47 @@ class GameState():
         )
 
 
+@dataclass
+class GameStatePer():
+    _dists_tbl: dict = field(default_factory=dict)
+
+    def calculate_dists(self, s: GameState):
+        for a in self.planets:
+            self._dists_tbl[a] = dict()
+            for b in self.planets:
+                self._dists_tbl[a][b] = a.distance(b)
+
+        #pprint.pprint(self._dists_tbl)
+
+gsp:GameStatePer= GameStatePer()
+
+def neutrals(s: GameState) -> Iterable[Planet]:
+    for p in s.planets:
+        if p.owner_id == 0:
+            yield p
+
+
+def make_move(sp: GameStatePer, s: GameState) -> str:
+
+    for p in neutrals(s):
+        best_from, best_to = None, None
+        # p.
+
+    if True:
+        return 'nop'
+
+    else:
+        return 'nop'
+
+
+def simulate_fight(src_planet, target_planet, ships):
+    distance = src_planet.distance(target_planet)
+    ship_inc = distance*target_planet.production
+
+    attacker = src_planet.ships
+    defender = [n+ship_inc for n in target_planet.ships]
+
+    target_result = battle_round(attacker, defender)
+    src_result = battle_round(defender, attacker)
+
+    return src_result, target_result

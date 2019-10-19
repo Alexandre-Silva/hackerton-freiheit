@@ -3,11 +3,12 @@
 from dataclasses import dataclass, field
 from math import ceil, sqrt
 from typing import List, Tuple, Optional, Iterable, Union
+import time
 import pprint
 import csv
 
-LOG_CSV_COLUMNS = ['capture_neutrals', 'nop', 'victory']
-strat_log = {'capture_neutrals': 0, 'nop': 0, 'victory': 0}
+LOG_CSV_COLUMNS = ['capture_neutrals', 'bailout', 'nop', 'victory']
+strat_log = {'capture_neutrals': 0, 'bailout': 0, 'nop': 0, 'victory': 0}
 CSV_FILE = "istsatlog.csv"
 
 
@@ -200,6 +201,32 @@ def strat_capture_simple(sp: GameStatePer, s: GameState) -> str:
         return Nop()
 
 
+def strat_bailout(sp: GameStatePer, s: GameState) -> str:
+    best_from, best_to, worst_loss = None, None, 0
+    for enemy_planet in unfriendly(s):
+        for friend_planet in friendly(s):
+            # already has incoming friendly fleet
+            incoming_fleet = incoming_fleets(s, enemy_planet)
+            incoming_fleet = list(filter(lambda f: f.owner_id == s.player_id, incoming_fleet))
+
+            for fleet in incoming_fleet:
+                if fleet.eta < 5:
+                    continue
+
+                # will win
+                result = simulate_fight(enemy_planet, friend_planet)
+                if result_defender_wins(*result):
+                    continue
+
+                if sum(friend_planet.ships) > worst_loss:
+                    best_from, best_to, worst_loss = friend_planet, enemy_planet, sum(friend_planet.ships)
+
+    if best_from is not None:
+        return Send(best_from, best_to, best_from.ships)
+    else:
+        return Nop()
+
+
 def log(data):
     try:
         with open(CSV_FILE, 'a') as csvfile:
@@ -309,5 +336,11 @@ class Agent():
             log(strat_log)
             return Nop()
 
-        strat_log['capture_neutrals'] += 1
-        return strat_capture_simple(sp, s)
+        res = strat_capture_simple(sp, s)
+        if str(res) == 'nop':
+            strat_log['bailout'] += 1
+            return strat_bailout(sp, s)
+        else:
+            strat_log['capture_neutrals'] += 1
+            return res
+

@@ -3,6 +3,7 @@
 import socket, json
 import random, pprint
 import sys
+import time
 
 from shared import GameState, Fleet, Planet, Agent
 
@@ -36,7 +37,7 @@ def main():
         data = io.readline().strip()
         if not data:
             print("waaait - failed to register")
-            io.sleep(5)
+            time.sleep(5)
             continue
 
         elif data[0] == "{":

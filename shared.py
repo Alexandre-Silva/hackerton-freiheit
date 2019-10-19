@@ -17,6 +17,7 @@ class Stats():
     CaptureMultiStart: int = 0
     CaptureMultiSend2: int = 0
     CaptureMultiCancel: int = 0
+    Bailout: int = 0
     Victory: bool = False
     Opponent: str = None
 
@@ -42,6 +43,10 @@ def ships_sub(a: Ships, b: Ships) -> Ships:
     return [x - y for x, y in zip(a, b)]
 
 
+def ships_lt(a: Ships, b: Ships) -> Ships:
+    return sum(a) < sum(b)
+
+
 @dataclass
 class Planet():
     id: int
@@ -64,15 +69,21 @@ class Planet():
         '''
         Returns ships that will be in the planet after `ticks`
         '''
-        ships_inc = [0, 0, 0]
-        for i in range(3):
-            ships_inc[i] = ticks * self.production[i]
+
+        ships_inc = self.ships_produced_in(ticks)
 
         ships = [0, 0, 0]
         for i in range(3):
             ships[i] = self.ships[i] + ships_inc[i]
 
         return ships
+
+    def ships_produced_in(self, ticks: int) -> Ships:
+        ships_inc = [0, 0, 0]
+        for i in range(3):
+            ships_inc[i] = ticks * self.production[i]
+
+        return ships_inc
 
     @staticmethod
     def load(raw: dict) -> 'Planet':
@@ -475,45 +486,63 @@ class StratCaptureMultiPlanetState():
         return self.send_round != 0
 
 
-def strat_bailout(sp: GameStatePer, s: GameState) -> str:
-    best_from, best_to, worst_loss = None, None, 0
-    for enemy_planet in unfriendly(s):
-        for friend_planet in friendly(s):
-            # already has incoming friendly fleet
-            incoming_fleet = incoming_fleets(s, enemy_planet)
-            incoming_fleet = list(
-                filter(lambda f: f.owner_id == s.player_id, incoming_fleet))
+def strat_bailout(sp: GameStatePer, s: GameState) -> Move:
+    attacked_planets: Set[Planet] = set()
+    attacking_fleets: List[Fleet] = list()
 
-            for fleet in incoming_fleet:
-                if fleet.eta < 5:
-                    continue
+    for fleet in s.fleets:
+        is_friendly = fleet.owner_id == s.player_id
+        if is_friendly:
+            continue
 
-                # will win
-                result = simulate_fight(enemy_planet, friend_planet)
-                if result_defender_wins(*result):
-                    continue
+        target = s.planet_get(fleet.target_id)
+        if target.owner_id != s.player_id:
+            continue
 
-                if sum(friend_planet.ships) > worst_loss:
-                    best_from, best_to, worst_loss = friend_planet, enemy_planet, sum(
-                        friend_planet.ships)
+        attacked_planets.add(target)
+        attacking_fleets.append(fleet)
 
-    if best_from is not None:
+    for fleet in attacking_fleets:
+        # only bail if attack eminent
+        delay = fleet.eta - s.round
+        if delay > 4:
+            continue
+
+        origin = s.planet_get(fleet.origin_id)
+        target = s.planet_get(fleet.target_id)
+        result = simulate_fight(origin, target, fleet.ships)
+        if result_defender_wins(*result):
+            continue
+
+        production = target.ships_produced_in(delay)
+        bailed = ships_lt(target.ships, production)
+        if bailed:
+            continue
+
+        safe_planets = list(
+            filter(lambda p: p not in attacked_planets, friendly(s)))
+        safe_planets.sort(key=lambda p: sp.dist(target, p))
+
+        if len(safe_planets) == 0:
+            continue
+
+        planet = safe_planets[0]
+
         return Send(
-            best_from,
-            best_to,
-            best_from.ships,
+            target,
+            planet,
+            target.ships,
             PRIO_BAILOUT,
             'Bailout',
         )
 
-    else:
-        return Nop()
+    return Nop()
 
 
 def log(data):
     cols_names = [f.name for f in fields(Stats)]
     try:
-        exists = not os.path.isfile(CSV_FILE)
+        exists = not os.path.exists(CSV_FILE)
         with open(CSV_FILE, 'a') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=cols_names)
             if not exists:
@@ -630,6 +659,7 @@ class Agent():
             log(asdict(stats))
             return Nop()
 
+        # STRATS
         moves = []
         moves.append(strat_capture_simple(sp, s))
 
@@ -637,7 +667,10 @@ class Agent():
             StratCaptureMultiPlanetState.__name__]
         moves.append(scmps.tick(sp, s))
 
-        # TODO add bailout
+        # NOTE reevaluate bailout
+        # moves.append(strat_bailout(sp, s))
+
+        # PICKING one
 
         moves.sort(key=lambda x: x.prio)
         move = moves.pop(0)

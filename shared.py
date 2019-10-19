@@ -17,7 +17,7 @@ class Planet():
     y: int
     owner_id: id
     ships: Tuple[int, int, int]
-    prodution: Tuple[int, int, int]
+    production: Tuple[int, int, int]
 
     def distance(self, other: 'Planet'):
         xdiff = self.x - other.x
@@ -134,6 +134,12 @@ def friendly(s: GameState) -> Iterable[Planet]:
             yield p
 
 
+def unfriendly(s: GameState) -> Iterable[Planet]:
+    for p in s.planets:
+        if p.owner_id != s.player_id:
+            yield p
+
+
 def neutrals(s: GameState) -> Iterable[Planet]:
     for p in s.planets:
         if p.owner_id == 0:
@@ -150,23 +156,27 @@ def move(from_: Planet, to: Planet, shipa: int, shipb: int, shipc: int) -> str:
     return f'send {from_.id} {to.id} {shipa} {shipb} {shipc}'
 
 
-def strat_capture_neutrals(sp: GameStatePer, s: GameState) -> str:
-
+def strat_capture_simple(sp: GameStatePer, s: GameState) -> str:
     best_from, best_to, best_dist = None, None, 0
-    for n in neutrals(s):
+    for target in unfriendly(s):
         for mine in friendly(s):
-            dist = sp.dist(mine, n)
+            dist = sp.dist(mine, target)
 
             if best_from is not None and best_dist <= dist:
                 continue
 
             # already has incoming friendly fleet
-            inc = incoming_fleets(s, n)
+            inc = incoming_fleets(s, target)
             inc = list(filter(lambda f: f.owner_id == s.player_id, inc))
             if len(inc) > 0:
                 continue
 
-            best_from, best_to, best_dist = mine, n, dist
+            # will win
+            result = simulate_fight(mine, target)
+            if result_defender_wins(*result):
+                continue
+
+            best_from, best_to, best_dist = mine, target, dist
 
     if best_from is not None:
         return move(
@@ -191,15 +201,27 @@ def log(data):
         print("I/O error")
 
 
-def simulate_fight(src_planet, target_planet, ships):
-    distance = src_planet.distance(target_planet)
-    ship_inc = distance * target_planet.production
+def simulate_fight(src: Planet, target: Planet, ships=None):
+    '''
+    if ships is None, assumes all from the srcc are sent
+    '''
 
-    attacker = src_planet.ships
-    defender = [n + ship_inc for n in target_planet.ships]
+    distance = src.distance(target)
 
-    target_result = battle_round(attacker, defender)
-    src_result = battle_round(defender, attacker)
+    ships_inc = [0, 0, 0]
+    for i in range(3):
+        ships_inc[i] = distance * target.production[i]
+
+    if ships is None:
+        attacker = src.ships
+    else:
+        attacker = ships
+
+    defender = [0, 0, 0]
+    for i in range(3):
+        defender[i] = target.ships[i] + ships_inc[i]
+
+    src_result, target_result = battle(attacker, defender)
 
     return src_result, target_result
 
@@ -211,6 +233,10 @@ def troops_needed(src_planet, target_planet, ships):
     defender = [n + ship_inc[i] + 1 for i, n in enumerate(target_planet.ships)]
 
     return defender
+
+
+def result_defender_wins(src, target) -> bool:
+    return sum(target) >= sum(src)
 
 
 def battle_round(attacker, defender):
@@ -233,17 +259,18 @@ def battle_round(attacker, defender):
         defender[def_type] = max(0, defender[def_type])
     return defender
 
-def battle(s1,s2):
+
+def battle(s1, s2):
     ships1 = s1[::]
     ships2 = s2[::]
-    while sum(ships1) > 0 and sum(ships2) >0:
-        new1 = battle_round(ships2,ships1)
-        ships2 = battle_round(ships1,ships2)
+    while sum(ships1) > 0 and sum(ships2) > 0:
+        new1 = battle_round(ships2, ships1)
+        ships2 = battle_round(ships1, ships2)
         ships1 = new1
         #print ships1,ships2
 
-    ships1 = map(int,ships1)
-    ships2 = map(int,ships2)
+    ships1 = map(int, ships1)
+    ships2 = map(int, ships2)
     #print ships1,ships2
     return ships1, ships2
 
@@ -268,4 +295,4 @@ class Agent():
 
             return 'nop'
 
-        return strat_capture_neutrals(sp, s)
+        return strat_capture_simple(sp, s)

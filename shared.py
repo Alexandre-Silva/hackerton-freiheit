@@ -17,6 +17,7 @@ class Stats():
     CaptureMultiStart: int = 0
     CaptureMultiSend2: int = 0
     CaptureMultiCancel: int = 0
+    Defence: int = 0
     Bailout: int = 0
     Victory: bool = False
     Opponent: str = None
@@ -32,6 +33,7 @@ Ships = Tuple[int, int, int]
 PRIO_CAPTURE_MULTI_START = 6
 PRIO_CAPTURE_SIMPLE = 5
 PRIO_CAPTURE_MULTI_2ND = 4
+PRIO_DEFENCE = 3
 PRIO_BAILOUT = 1
 
 
@@ -286,9 +288,15 @@ def incoming_fleets(s: GameState, planet: Planet) -> Iterable[Fleet]:
             yield f
 
 
-def has_incoming_friendly_fleet(s: GameState, target: Planet):
+def incoming_friendly_fleet(s: GameState, target: Planet):
     inc = incoming_fleets(s, target)
-    inc = list(filter(lambda f: f.owner_id == s.player_id, inc))
+    fleets = list(filter(lambda f: f.owner_id == s.player_id, inc))
+    fleets.sort(key=lambda f: f.eta)
+    return fleets
+
+
+def has_incoming_friendly_fleet(s: GameState, target: Planet):
+    inc = list(incoming_friendly_fleet(s, target))
     return len(inc) > 0
 
 
@@ -296,6 +304,27 @@ def has_incoming_enemy_fleet(s: GameState, target: Planet):
     inc = incoming_fleets(s, target)
     inc = list(filter(lambda f: f.owner_id != s.player_id, inc))
     return len(inc) > 0
+
+
+def attacks(sp: GameStatePer, s: GameState) -> Tuple[Set[Planet], List[Fleet]]:
+    attacked_planets: Set[Planet] = set()
+    attacking_fleets: List[Fleet] = list()
+
+    for fleet in s.fleets:
+        is_friendly = fleet.owner_id == s.player_id
+        if is_friendly:
+            continue
+
+        target = s.planet_get(fleet.target_id)
+        if target.owner_id != s.player_id:
+            continue
+
+        attacked_planets.add(target)
+        attacking_fleets.append(fleet)
+
+    attacking_fleets.sort(key=lambda f: f.eta)
+
+    return attacked_planets, attacking_fleets
 
 
 def strat_capture_simple(sp: GameStatePer, s: GameState) -> Move:
@@ -487,20 +516,7 @@ class StratCaptureMultiPlanetState():
 
 
 def strat_bailout(sp: GameStatePer, s: GameState) -> Move:
-    attacked_planets: Set[Planet] = set()
-    attacking_fleets: List[Fleet] = list()
-
-    for fleet in s.fleets:
-        is_friendly = fleet.owner_id == s.player_id
-        if is_friendly:
-            continue
-
-        target = s.planet_get(fleet.target_id)
-        if target.owner_id != s.player_id:
-            continue
-
-        attacked_planets.add(target)
-        attacking_fleets.append(fleet)
+    attacked_planets, attacking_fleets = attacks(sp, s)
 
     for fleet in attacking_fleets:
         # only bail if attack eminent
@@ -510,7 +526,7 @@ def strat_bailout(sp: GameStatePer, s: GameState) -> Move:
 
         origin = s.planet_get(fleet.origin_id)
         target = s.planet_get(fleet.target_id)
-        result = simulate_fight(origin, target, fleet.ships)
+        result = simulate_fight(origin, target, fleet.ships, delay)
         if result_defender_wins(*result):
             continue
 
@@ -539,6 +555,47 @@ def strat_bailout(sp: GameStatePer, s: GameState) -> Move:
     return Nop()
 
 
+def strat_defend(sp: GameStatePer, s: GameState) -> Move:
+    attacked_planets, attacking_fleets = attacks(sp, s)
+
+    for fleet in attacking_fleets:
+        # only bail if attack eminent
+        delay = fleet.eta - s.round
+
+        origin = s.planet_get(fleet.origin_id)
+        target = s.planet_get(fleet.target_id)
+        result = simulate_fight(origin, target, fleet.ships, delay)
+        if result_defender_wins(*result):
+            continue
+
+        planets_in_range: List[Planet] = []
+        for p in friendly(s):
+            if p not in attacked_planets:
+                planets_in_range.append(p)
+        planets_in_range.sort(key=lambda p: sp.dist(p,target))
+
+        # helping_fleets = incoming_friendly_fleet(s, target)
+
+        # helpers: List[Planet] = []
+        for p in planets_in_range:
+            ships = target.ships_in(delay)
+            ships = ships_add(ships, p.ships)
+
+            result = simulate_fight(origin, target, fleet.ships, delay,ships)
+            if not result_defender_wins(*result):
+                continue
+
+            return Send(
+                p,
+                target,
+                p.ships,
+                PRIO_DEFENCE,
+                'Defence',
+            )
+
+    return Nop()
+
+
 def log(data):
     cols_names = [f.name for f in fields(Stats)]
     try:
@@ -552,7 +609,7 @@ def log(data):
         print("I/O error")
 
 
-def simulate_fight(src: Planet, target: Planet, ships=None, delay=None):
+def simulate_fight(src: Planet, target: Planet, ships=None, delay=None, ships_defence=None):
     '''
     coputes the battle result of attackign from `src` to `target` with ships after `delay` ticks
 
@@ -573,9 +630,12 @@ def simulate_fight(src: Planet, target: Planet, ships=None, delay=None):
     for i in range(3):
         ships_inc[i] = delay * target.production[i]
 
-    defender = [0, 0, 0]
-    for i in range(3):
-        defender[i] = target.ships[i] + ships_inc[i]
+    if ships_defence is None:
+        defender = [0, 0, 0]
+        for i in range(3):
+            defender[i] = target.ships[i] + ships_inc[i]
+    else:
+        defender = ships_defence
 
     src_result, target_result = battle(attacker, defender)
 
@@ -669,6 +729,8 @@ class Agent():
 
         # NOTE reevaluate bailout
         # moves.append(strat_bailout(sp, s))
+
+        moves.append(strat_defend(sp,s))
 
         # PICKING one
 

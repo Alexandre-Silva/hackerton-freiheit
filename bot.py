@@ -37,7 +37,7 @@ def main():
         data = io.readline().strip()
         if not data:
             print("waaait - failed to register")
-            time.sleep(5)
+            sys.exit()
             continue
 
         elif data[0] == "{":

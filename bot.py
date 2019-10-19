@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+import time
 import socket, json
 import random, pprint
 import sys
+import os
 
-from shared import GameState, Fleet, Planet, Agent
+from shared import GameState, Fleet, Planet, Agent, Nop
 
 #import view
 #view.init(1024, 768)
@@ -23,7 +25,8 @@ io = s.makefile('rw')
 def write(data):
     io.write('%s\n' % (data, ))
     io.flush()
-    print("SENDING ", data)
+    if 'QUIET' not in os.environ:
+        print("SENDING ", data)
 
 
 def main():
@@ -46,12 +49,25 @@ def main():
 
             move = agent.tick(state_raw)
 
+            if not isinstance(move, Nop):
+                print(f'{agent.s.round:03d} {move}')
+
             if agent.s.over:
                 break
 
-            write(str(move))
+            write(move.encode())
 
         else:
+            if data == 'command received. waiting for other player...':
+                continue
+            elif data == 'calculating round':
+                print('.')
+
+                continue
+
+            elif data =='waaait':
+                time.sleep(1)
+
             print(data)
 
 

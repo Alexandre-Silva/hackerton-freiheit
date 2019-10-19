@@ -3,12 +3,12 @@
 import socket, json
 import random, pprint
 
-from shared import GameState, Fleet, Planet
+from shared import GameState, Fleet, Planet, Agent
 
 #import view
 #view.init(1024, 768)
 
-USERNAME = "testing123123"
+USERNAME = "alex-test"
 PASSWORD = "asdasdasdewbhdvsfk"
 
 URL = 'localhost'
@@ -29,54 +29,27 @@ def main():
 
     write('login %s %s' % (USERNAME, PASSWORD))
 
+    agent = Agent()
+
     while 1:
         data = io.readline().strip()
         if not data:
             print("waaait")
             continue
             break
+
         elif data[0] == "{":
-            state = json.loads(data)
+            state_raw = json.loads(data)
             #        view.update(state)
             # pprint.pprint(state)
-            print()
 
-            gstate = GameState.load(state)
-            print(gstate)
+            move = agent.tick(state_raw)
 
-            print()
-
-            if state['winner'] is not None or state['game_over']:
-                print("final: %s" % state['winner'])
+            if agent.s.over:
                 break
 
-            player_id = state['player_id']
+            write(move)
 
-            enemy_planets = [
-                planet for planet in state['planets']
-                if planet['owner_id'] != player_id
-            ]
-            my_planets = [(sum(planet['ships']), planet)
-                          for planet in state['planets']
-                          if planet['owner_id'] == player_id]
-            my_planets.sort(key=lambda d: d[0])
-
-            write("nop")
-
-            # if not my_planets:
-            #     write("nop")
-            # elif not enemy_planets:
-            #     write("nop")
-            # else:
-            #     best_planet = my_planets[-1][1]
-            #     target_planet = random.choice(enemy_planets)
-
-            #     write("send %s %s %d %d %d" % (
-            #         best_planet['id'],
-            #         target_planet['id'],
-            #         best_planet['ships'][0]/6,
-            #         best_planet['ships'][1]/6,
-            #         best_planet['ships'][2]/6))
         else:
             print(data)
 

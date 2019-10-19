@@ -35,9 +35,9 @@ def main():
     while 1:
         data = io.readline().strip()
         if not data:
-            print("waaait")
+            print("waaait - failed to register")
+            io.sleep(5)
             continue
-            break
 
         elif data[0] == "{":
             state_raw = json.loads(data)

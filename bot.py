@@ -2,14 +2,16 @@
 
 import socket, json
 import random, pprint
+import sys
 
 from shared import GameState, Fleet, Planet
 
 #import view
 #view.init(1024, 768)
 
-USERNAME = "testing123123"
-PASSWORD = "asdasdasdewbhdvsfk"
+
+USERNAME = sys.argv[1]
+PASSWORD = sys.argv[2]
 
 URL = 'localhost'
 URL = "rps.vhenne.de"
@@ -31,6 +33,7 @@ def main():
 
     while 1:
         data = io.readline().strip()
+        print(data)
         if not data:
             print("waaait")
             continue
@@ -44,8 +47,7 @@ def main():
             gstate = GameState.load(state)
             print(gstate)
 
-            print()
-
+            
             if state['winner'] is not None or state['game_over']:
                 print("final: %s" % state['winner'])
                 break
@@ -61,25 +63,32 @@ def main():
                           if planet['owner_id'] == player_id]
             my_planets.sort(key=lambda d: d[0])
 
-            write("nop")
+            if not my_planets:
+                write("nop")
+            elif not enemy_planets:
+                write("nop")
+            else:
+                b_planet = best_planet(gstate)
+                target_planet = random.choice(enemy_planets)
 
-            # if not my_planets:
-            #     write("nop")
-            # elif not enemy_planets:
-            #     write("nop")
-            # else:
-            #     best_planet = my_planets[-1][1]
-            #     target_planet = random.choice(enemy_planets)
-
-            #     write("send %s %s %d %d %d" % (
-            #         best_planet['id'],
-            #         target_planet['id'],
-            #         best_planet['ships'][0]/6,
-            #         best_planet['ships'][1]/6,
-            #         best_planet['ships'][2]/6))
+                write("send %s %s %d %d %d" % (
+                     b_planet,
+                     target_planet['id'],
+                     gstate.planets[b_planet].ships[0]/6,
+                     gstate.planets[b_planet].ships[1]/6,
+                     gstate.planets[b_planet].ships[2]/6))
         else:
-            print(data)
 
 
+def best_planet(gstate):
+    b_planet = 0
+    for id, planet in enumerate(gstate.planets):
+        c = planet.comp(gstate.planets[b_planet])
+        if c > 0:
+            b_planet = id
+
+    return b_planet
+
+        
 if __name__ == '__main__':
     main()

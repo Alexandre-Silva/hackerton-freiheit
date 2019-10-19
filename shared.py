@@ -19,6 +19,10 @@ class Planet():
         ydiff = self.posy - other.posy
         return int(ceil(sqrt(xdiff * xdiff + ydiff * ydiff)))
 
+    def comp(self, other: 'Planet'):
+        return (self.ships[0] - other.ships[0]) + (self.ships[1] - other.ships[1]) + (self.ships[2] - other.ships[2])
+        
+
     @staticmethod
     def load(raw: dict) -> 'Planet':
         return Planet(
@@ -87,3 +91,5 @@ class GameState():
             raw['player_id'],
             list(map(Player.load, raw['players'])),
         )
+
+

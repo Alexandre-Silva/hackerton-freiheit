@@ -38,7 +38,7 @@ def main():
         elif data[0] == "{":
             state = json.loads(data)
             #        view.update(state)
-            pprint.pprint(state)
+            # pprint.pprint(state)
             print()
 
             gstate = GameState.load(state)

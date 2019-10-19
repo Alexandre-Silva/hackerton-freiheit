@@ -34,7 +34,6 @@ def main():
 
     while 1:
         data = io.readline().strip()
-        print(data)
         if not data:
             print("waaait")
             continue

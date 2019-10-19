@@ -203,6 +203,15 @@ def simulate_fight(src_planet, target_planet, ships):
 
     return src_result, target_result
 
+def troops_needed(src_planet, target_planet, ships):
+    distance = src_planet.distance(target_planet)
+    ship_inc = [distance * p for p in target_planet.production]
+
+    attacker = src_planet.ships
+    defender = [n + ship_inc[i] + 1 for i, n in enumerate(target_planet.ships)]
+
+    return defender
+
 
 def battle_round(attacker, defender):
     # only an asymetric round. this needs to be called twice

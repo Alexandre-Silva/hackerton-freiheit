@@ -49,7 +49,7 @@ def main():
             if agent.s.over:
                 break
 
-            write(move)
+            write(str(move))
 
         else:
             print(data)

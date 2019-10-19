@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from math import ceil, sqrt
-from typing import List, Tuple, Optional, Iterable
+from typing import List, Tuple, Optional, Iterable, Union
 import pprint
 import csv
 
@@ -128,6 +128,24 @@ class GameStatePer():
         return self._dists_tbl[a][b]
 
 
+@dataclass
+class Send():
+    src: Planet
+    target: Planet
+    ships: Tuple[int, int, int]
+
+    def __str__(self):
+        ships = self.ships
+        src = self.src.id
+        target = self.target.id
+        return f'send {src} {target} {ships[0]} {ships[1]} {ships[2]}'
+
+
+class Nop():
+    def __str__(self):
+        return 'nop'
+
+
 def friendly(s: GameState) -> Iterable[Planet]:
     for p in s.planets:
         if p.owner_id == s.player_id:
@@ -150,10 +168,6 @@ def incoming_fleets(s: GameState, planet: Planet) -> Iterable[Fleet]:
     for f in s.fleets:
         if f.target_id == planet.id:
             yield f
-
-
-def move(from_: Planet, to: Planet, shipa: int, shipb: int, shipc: int) -> str:
-    return f'send {from_.id} {to.id} {shipa} {shipb} {shipc}'
 
 
 def strat_capture_simple(sp: GameStatePer, s: GameState) -> str:
@@ -179,16 +193,10 @@ def strat_capture_simple(sp: GameStatePer, s: GameState) -> str:
             best_from, best_to, best_dist = mine, target, dist
 
     if best_from is not None:
-        return move(
-            best_from,
-            best_to,
-            best_from.ships[0],
-            best_from.ships[1],
-            best_from.ships[2],
-        )
+        return Send(best_from, best_to, best_from.ships)
 
     else:
-        return 'nop'
+        return Nop()
 
 
 def log(data):
@@ -224,6 +232,7 @@ def simulate_fight(src: Planet, target: Planet, ships=None):
     src_result, target_result = battle(attacker, defender)
 
     return src_result, target_result
+
 
 def troops_needed(src_planet, target_planet, ships):
     distance = src_planet.distance(target_planet)
@@ -280,7 +289,7 @@ class Agent():
         self.sp = GameStatePer()
         self.s: Optional[GameState] = None
 
-    def tick(self, raw: dict) -> str:
+    def tick(self, raw: dict) -> Union[Send, Nop]:
         s = GameState.load(raw)
         self.s = s
 
@@ -293,6 +302,6 @@ class Agent():
             else:
                 print('Defeat')
 
-            return 'nop'
+            return Nop()
 
         return strat_capture_simple(sp, s)

@@ -4,7 +4,10 @@ from dataclasses import dataclass, field
 from math import ceil, sqrt
 from typing import List, Tuple, Optional, Iterable
 import pprint
+import csv
 
+LOG_CSV_COLUMNS = ['escape', 'harass', 'attack', 'victory']
+CSV_FILE = "istsatlog.csv"
 
 @dataclass
 class Planet():
@@ -124,3 +127,14 @@ def make_move(sp: GameStatePer, s: GameState) -> str:
 
     else:
         return 'nop'
+
+
+def log(data):
+    try:
+        with open(CSV_FILE, 'a') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=LOG_CSV_COLUMNS)
+            writer.writeheader()
+            writer.writerow(data)
+    except IOError:
+        print("I/O error")
+

@@ -6,7 +6,8 @@ from typing import List, Tuple, Optional, Iterable, Union
 import pprint
 import csv
 
-LOG_CSV_COLUMNS = ['escape', 'harass', 'attack', 'victory']
+LOG_CSV_COLUMNS = ['capture_neutrals', 'nop', 'victory']
+strat_log = {'capture_neutrals': 0, 'nop': 0, 'victory': 0}
 CSV_FILE = "istsatlog.csv"
 
 
@@ -297,11 +298,16 @@ class Agent():
         sp = self.sp
 
         if s.over:
+
             if s.winner == s.player_id:
+                strat_log['victory'] = 1
                 print('Victory')
             else:
+                strat_log['victory'] = 0
                 print('Defeat')
 
+            log(strat_log)
             return Nop()
 
+        strat_log['capture_neutrals'] += 1
         return strat_capture_simple(sp, s)

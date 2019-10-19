@@ -5,6 +5,7 @@ import socket, json
 import random, pprint
 import sys
 import os
+import time
 
 from shared import GameState, Fleet, Planet, Agent, Nop
 
@@ -38,9 +39,9 @@ def main():
     while 1:
         data = io.readline().strip()
         if not data:
-            print("waaait")
+            print("waaait - failed to register")
+            sys.exit()
             continue
-            break
 
         elif data[0] == "{":
             state_raw = json.loads(data)
@@ -66,7 +67,9 @@ def main():
                 continue
 
             elif data =='waaait':
-                time.sleep(1)
+                print(data)
+                s.close()
+                sys.exit(1)
 
             print(data)
 

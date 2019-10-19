@@ -1,12 +1,28 @@
 #!/usr/bin/env python3
+import os.path
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, asdict
 from math import ceil, sqrt
 from typing import List, Tuple, Optional, Iterable, Union, Dict, Any, Callable, Set
+from typing import List, Tuple, Optional, Iterable, Union
+import time
 import pprint
 import csv
 
-LOG_CSV_COLUMNS = ['escape', 'harass', 'attack', 'victory']
+
+@dataclass
+class Stats():
+    Nop: int = 0
+    CaptureSimple: int = 0
+    CaptureMultiStart: int = 0
+    CaptureMultiSend2: int = 0
+    CaptureMultiCancel: int = 0
+    Victory: bool = False
+    Opponent: str = None
+
+
+stats = Stats()
+
 CSV_FILE = "istsatlog.csv"
 
 Move = Union['Nop', 'Send']
@@ -15,6 +31,7 @@ Ships = Tuple[int, int, int]
 PRIO_CAPTURE_MULTI_START = 6
 PRIO_CAPTURE_SIMPLE = 5
 PRIO_CAPTURE_MULTI_2ND = 4
+PRIO_BAILOUT = 1
 
 
 def ships_add(a: Ships, b: Ships) -> Ships:
@@ -228,6 +245,7 @@ class Send():
 
 class Nop():
     prio = 99
+    name = 'Nop'
 
     def encode(self):
         return 'nop'
@@ -328,7 +346,7 @@ class StratCaptureMultiPlanetState():
                 self.cancel(sp)
                 return Nop()
 
-            if  s.round < self.send_round:
+            if s.round < self.send_round:
                 # Do not nothing. Were waiting
                 return Nop()
 
@@ -448,6 +466,7 @@ class StratCaptureMultiPlanetState():
 
     def cancel(self, sp: GameStatePer):
         if self.active:
+            stats.CaptureMultiCancel += 1
             sp.unreserve(self.src_2nd_id)
             self.send_round = 0
 
@@ -456,11 +475,49 @@ class StratCaptureMultiPlanetState():
         return self.send_round != 0
 
 
+def strat_bailout(sp: GameStatePer, s: GameState) -> str:
+    best_from, best_to, worst_loss = None, None, 0
+    for enemy_planet in unfriendly(s):
+        for friend_planet in friendly(s):
+            # already has incoming friendly fleet
+            incoming_fleet = incoming_fleets(s, enemy_planet)
+            incoming_fleet = list(
+                filter(lambda f: f.owner_id == s.player_id, incoming_fleet))
+
+            for fleet in incoming_fleet:
+                if fleet.eta < 5:
+                    continue
+
+                # will win
+                result = simulate_fight(enemy_planet, friend_planet)
+                if result_defender_wins(*result):
+                    continue
+
+                if sum(friend_planet.ships) > worst_loss:
+                    best_from, best_to, worst_loss = friend_planet, enemy_planet, sum(
+                        friend_planet.ships)
+
+    if best_from is not None:
+        return Send(
+            best_from,
+            best_to,
+            best_from.ships,
+            PRIO_BAILOUT,
+            'Bailout',
+        )
+
+    else:
+        return Nop()
+
+
 def log(data):
+    cols_names = [f.name for f in fields(Stats)]
     try:
+        exists = not os.path.isfile(CSV_FILE)
         with open(CSV_FILE, 'a') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=LOG_CSV_COLUMNS)
-            writer.writeheader()
+            writer = csv.DictWriter(csvfile, fieldnames=cols_names)
+            if not exists:
+                writer.writeheader()
             writer.writerow(data)
     except IOError:
         print("I/O error")
@@ -560,10 +617,17 @@ class Agent():
 
         if s.over:
             if s.winner == s.player_id:
+                stats.Victory = True
                 print('Victory')
             else:
                 print('Defeat')
 
+            for p in s.players:
+                if p.id != s.player_id:
+                    stats.Opponent = p.name
+                    break
+
+            log(asdict(stats))
             return Nop()
 
         moves = []
@@ -573,8 +637,14 @@ class Agent():
             StratCaptureMultiPlanetState.__name__]
         moves.append(scmps.tick(sp, s))
 
+        # TODO add bailout
+
         moves.sort(key=lambda x: x.prio)
         move = moves.pop(0)
+
+        strat_name = move.name
+        count = getattr(stats, strat_name)
+        setattr(stats, strat_name, count + 1)
 
         for m in moves:
             if isinstance(m, Send) and m.on_discard is not None:

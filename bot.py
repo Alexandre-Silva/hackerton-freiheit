@@ -2,14 +2,15 @@
 
 import socket, json
 import random, pprint
+import sys
 
 from shared import GameState, Fleet, Planet, Agent
 
 #import view
 #view.init(1024, 768)
 
-USERNAME = "alex-test"
-PASSWORD = "asdasdasdewbhdvsfk"
+USERNAME = sys.argv[1]
+PASSWORD = sys.argv[2]
 
 URL = 'localhost'
 URL = "rps.vhenne.de"
@@ -33,6 +34,7 @@ def main():
 
     while 1:
         data = io.readline().strip()
+        print(data)
         if not data:
             print("waaait")
             continue
@@ -52,6 +54,16 @@ def main():
 
         else:
             print(data)
+
+
+def best_planet(gstate):
+    b_planet = 0
+    for id, planet in enumerate(gstate.planets):
+        c = planet.comp(gstate.planets[b_planet])
+        if c > 0:
+            b_planet = id
+
+    return b_planet
 
 
 if __name__ == '__main__':

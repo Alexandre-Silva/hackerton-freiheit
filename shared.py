@@ -24,6 +24,10 @@ class Planet():
         ydiff = self.y - other.y
         return int(ceil(sqrt(xdiff * xdiff + ydiff * ydiff)))
 
+    def comp(self, other: 'Planet'):
+        return (self.ships[0] - other.ships[0]) + (
+            self.ships[1] - other.ships[1]) + (self.ships[2] - other.ships[2])
+
     @staticmethod
     def load(raw: dict) -> 'Planet':
         return Planet(
@@ -185,6 +189,54 @@ def log(data):
             writer.writerow(data)
     except IOError:
         print("I/O error")
+
+
+def simulate_fight(src_planet, target_planet, ships):
+    distance = src_planet.distance(target_planet)
+    ship_inc = distance * target_planet.production
+
+    attacker = src_planet.ships
+    defender = [n + ship_inc for n in target_planet.ships]
+
+    target_result = battle_round(attacker, defender)
+    src_result = battle_round(defender, attacker)
+
+    return src_result, target_result
+
+
+def battle_round(attacker, defender):
+    # only an asymetric round. this needs to be called twice
+    numships = len(attacker)
+    defender = defender[::]
+    for def_type in range(0, numships):
+        for att_type in range(0, numships):
+            if def_type == att_type:
+                multiplier = 0.1
+                absolute = 1
+            if (def_type - att_type) % numships == 1:
+                multiplier = 0.25
+                absolute = 2
+            if (def_type - att_type) % numships == numships - 1:
+                multiplier = 0.01
+                absolute = 1
+            defender[def_type] -= max((attacker[att_type] * multiplier),
+                                      (attacker[att_type] > 0) * absolute)
+        defender[def_type] = max(0, defender[def_type])
+    return defender
+
+def battle(s1,s2):
+    ships1 = s1[::]
+    ships2 = s2[::]
+    while sum(ships1) > 0 and sum(ships2) >0:
+        new1 = battle_round(ships2,ships1)
+        ships2 = battle_round(ships1,ships2)
+        ships1 = new1
+        #print ships1,ships2
+
+    ships1 = map(int,ships1)
+    ships2 = map(int,ships2)
+    #print ships1,ships2
+    return ships1, ships2
 
 
 class Agent():

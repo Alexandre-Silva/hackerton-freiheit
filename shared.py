@@ -45,6 +45,10 @@ def ships_sub(a: Ships, b: Ships) -> Ships:
     return [x - y for x, y in zip(a, b)]
 
 
+def ships_mul(s: Ships, m) -> Ships:
+    return (int(s[0] * m), int(s[1] * m), int(s[2] * m))
+
+
 def ships_lt(a: Ships, b: Ships) -> Ships:
     return sum(a) < sum(b)
 
@@ -328,12 +332,14 @@ def attacks(sp: GameStatePer, s: GameState) -> Tuple[Set[Planet], List[Fleet]]:
 
 
 def strat_capture_simple(sp: GameStatePer, s: GameState) -> Move:
+    attacked, fleets = attacks(sp, s)
+
     best_from, best_to, best_dist = None, None, 0
     for target in unfriendly(s):
-        for mine in friendly(s):
-            dist = sp.dist(mine, target)
+        for src in friendly(s):
+            dist = sp.dist(src, target)
 
-            if sp.is_reserved(mine):
+            if sp.is_reserved(src):
                 continue
 
             if best_from is not None and best_dist <= dist:
@@ -342,15 +348,49 @@ def strat_capture_simple(sp: GameStatePer, s: GameState) -> Move:
             if has_incoming_friendly_fleet(s, target):
                 continue
 
+            if src in attacked:
+                # under attack and will win
+                ships = (0, 0, 0)
+                delay = 500
+                for f in fleets:
+                    if f.target_id == src.id:
+                        delay2 = f.eta - s.round
+                        if delay2 < delay:
+                            delay = delay2
+                        ships = ships_add(ships, f.ships)
+                attack_ships = ships
+
+                # WILL LOOSE
+                result = battle(ships, ships_add(src.ships,
+                                                 src.ships_in(delay)))
+                if not result_defender_wins(*result):
+                    continue
+
+                fut_ships = src.ships_in(delay)
+                d = 1.0
+                for i in range(1, 6):
+                    ships = ships_mul(src.ships, d)
+                    ships_w_fut = ships_add(ships, fut_ships)
+                    result = battle(attack_ships, ships_w_fut)
+                    if result_defender_wins(*result):
+                        defence_ships = ships
+                        d -= 0.5**i
+
+                attack_ships = ships_sub(src.ships, defence_ships)
+
+            else:
+                attack_ships = src.ships
+
+
             # will win
-            result = simulate_fight(mine, target)
+            result = simulate_fight(src, target, ships=attack_ships)
             if result_defender_wins(*result):
                 continue
 
-            best_from, best_to, best_dist = mine, target, dist
+            best_from, best_to, best_dist, best_ships = src, target, dist, attack_ships
 
     if best_from is not None:
-        return Send(best_from, best_to, best_from.ships, PRIO_CAPTURE_SIMPLE,
+        return Send(best_from, best_to, best_ships, PRIO_CAPTURE_SIMPLE,
                     'CaptureSimple')
 
     else:
@@ -572,7 +612,7 @@ def strat_defend(sp: GameStatePer, s: GameState) -> Move:
         for p in friendly(s):
             if p not in attacked_planets:
                 planets_in_range.append(p)
-        planets_in_range.sort(key=lambda p: sp.dist(p,target))
+        planets_in_range.sort(key=lambda p: sp.dist(p, target))
 
         # helping_fleets = incoming_friendly_fleet(s, target)
 
@@ -581,7 +621,7 @@ def strat_defend(sp: GameStatePer, s: GameState) -> Move:
             ships = target.ships_in(delay)
             ships = ships_add(ships, p.ships)
 
-            result = simulate_fight(origin, target, fleet.ships, delay,ships)
+            result = simulate_fight(origin, target, fleet.ships, delay, ships)
             if not result_defender_wins(*result):
                 continue
 
@@ -609,7 +649,11 @@ def log(data):
         print("I/O error")
 
 
-def simulate_fight(src: Planet, target: Planet, ships=None, delay=None, ships_defence=None):
+def simulate_fight(src: Planet,
+                   target: Planet,
+                   ships=None,
+                   delay=None,
+                   ships_defence=None):
     '''
     coputes the battle result of attackign from `src` to `target` with ships after `delay` ticks
 
@@ -725,12 +769,12 @@ class Agent():
 
         scmps: StratCaptureMultiPlanetState = self.sp.strat_states[
             StratCaptureMultiPlanetState.__name__]
-        moves.append(scmps.tick(sp, s))
+        # moves.append(scmps.tick(sp, s))
 
         # NOTE reevaluate bailout
         # moves.append(strat_bailout(sp, s))
 
-        moves.append(strat_defend(sp,s))
+        moves.append(strat_defend(sp, s))
 
         # PICKING one
 

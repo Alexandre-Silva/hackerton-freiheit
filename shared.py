@@ -331,6 +331,38 @@ def attacks(sp: GameStatePer, s: GameState) -> Tuple[Set[Planet], List[Fleet]]:
     return attacked_planets, attacking_fleets
 
 
+def available_ships(sp: GameStatePer, s: GameState, p: Planet) -> Ships:
+    # under attack and will win
+    ships = (0, 0, 0)
+    delay = 500
+    for f in s.fleets:
+        if f.target_id == p.id:
+            delay2 = f.eta - s.round
+            if delay2 < delay:
+                delay = delay2
+            ships = ships_add(ships, f.ships)
+    attack_ships = ships
+
+    # WILL LOOSE
+    result = battle(ships, ships_add(p.ships, p.ships_in(delay)))
+    if not result_defender_wins(*result):
+        return None
+
+    fut_ships = p.ships_in(delay)
+    d = 1.0
+    for i in range(1, 6):
+        ships = ships_mul(p.ships, d)
+        ships_w_fut = ships_add(ships, fut_ships)
+        result = battle(attack_ships, ships_w_fut)
+        if result_defender_wins(*result):
+            defence_ships = ships
+            d -= 0.5**i
+
+    attack_ships = ships_sub(p.ships, defence_ships)
+
+    return attack_ships
+
+
 def strat_capture_simple(sp: GameStatePer, s: GameState) -> Move:
     attacked, fleets = attacks(sp, s)
 
@@ -349,38 +381,13 @@ def strat_capture_simple(sp: GameStatePer, s: GameState) -> Move:
                 continue
 
             if src in attacked:
-                # under attack and will win
-                ships = (0, 0, 0)
-                delay = 500
-                for f in fleets:
-                    if f.target_id == src.id:
-                        delay2 = f.eta - s.round
-                        if delay2 < delay:
-                            delay = delay2
-                        ships = ships_add(ships, f.ships)
-                attack_ships = ships
-
-                # WILL LOOSE
-                result = battle(ships, ships_add(src.ships,
-                                                 src.ships_in(delay)))
-                if not result_defender_wins(*result):
+                attack_ships = available_ships(sp, s, src)
+                # will loose
+                if attack_ships is None:
                     continue
-
-                fut_ships = src.ships_in(delay)
-                d = 1.0
-                for i in range(1, 6):
-                    ships = ships_mul(src.ships, d)
-                    ships_w_fut = ships_add(ships, fut_ships)
-                    result = battle(attack_ships, ships_w_fut)
-                    if result_defender_wins(*result):
-                        defence_ships = ships
-                        d -= 0.5**i
-
-                attack_ships = ships_sub(src.ships, defence_ships)
 
             else:
                 attack_ships = src.ships
-
 
             # will win
             result = simulate_fight(src, target, ships=attack_ships)
@@ -405,6 +412,8 @@ class StratCaptureMultiPlanetState():
     send_round: int  # when send the second planet's fleet. 0 means inactive
 
     def tick(self, sp: GameStatePer, s: GameState) -> Move:
+        attacked, fleets = attacks(sp, s)
+
         if self.active:
             src_1st = s.planet_get(self.src_1st_id)
             src_2nd = s.planet_get(self.src_2nd_id)
@@ -461,6 +470,9 @@ class StratCaptureMultiPlanetState():
                     if sp.is_reserved(src1):
                         continue
 
+                    if src1 in attacked:
+                        continue
+
                     for src2 in friendly_:
                         src2: Planet
 
@@ -468,6 +480,9 @@ class StratCaptureMultiPlanetState():
                             continue
 
                         if src1.id == src2.id:
+                            continue
+
+                        if src2 in attacked:
                             continue
 
                         # src 1 is always farther to target
@@ -769,7 +784,7 @@ class Agent():
 
         scmps: StratCaptureMultiPlanetState = self.sp.strat_states[
             StratCaptureMultiPlanetState.__name__]
-        # moves.append(scmps.tick(sp, s))
+        moves.append(scmps.tick(sp, s))
 
         # NOTE reevaluate bailout
         # moves.append(strat_bailout(sp, s))
